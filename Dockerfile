@@ -1,5 +1,5 @@
-# Use Node.js official image
-FROM node:20-slim
+# Start from Bun's official image
+FROM oven/bun:1.1.6
 
 # Install necessary system dependencies for canvas
 RUN apt-get update && apt-get install -y \
@@ -16,7 +16,8 @@ WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install
+COPY bun.lock ./
+RUN bun install
 
 # Copy the rest of your app source code
 COPY . .
@@ -25,4 +26,4 @@ COPY . .
 EXPOSE 3001
 
 # Start the server
-CMD ["node", "index.js"]
+CMD ["bun", "index.ts"]
