@@ -24,7 +24,7 @@ serve({
       }
 
       const base64 = renderChart(chartOptions);
-      return new Response(JSON.stringify({data: base64}, {
+      return new Response(JSON.stringify({data: base64}), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
