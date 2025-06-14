@@ -24,9 +24,9 @@ serve({
       }
 
       const base64 = renderChart(chartOptions);
-      return new Response(base64, {
+      return new Response(JSON.stringify({data: base64}, {
         status: 200,
-        headers: { "Content-Type": "image/png" },
+        headers: { "Content-Type": "application/json" },
       });
     } catch (error) {
       console.error("Error generating chart:", error);
@@ -46,7 +46,7 @@ function renderChart(options: any) {
   const op = options.option;
   op.animation = false;
   chart.setOption(op);
-  const base64 = canvas.toBuffer("image/png");
+  const base64 = canvas.toDataURL("image/png");
   chart.dispose();
   return base64;
 }
