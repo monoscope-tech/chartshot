@@ -74,7 +74,7 @@ serve({
       opt.series = createSeriesConfig(chartOptions.chartType, "discord", 0);
 
       const base64 = renderChart(opt);
-      return new Response(JSON.stringify(base64), {
+      return new Response(base64, {
         status: 200,
         headers: { "Content-Type": "image/png" },
       });
