@@ -23,7 +23,20 @@ serve({
   port: PORT,
   fetch: async (req: Request) => {
     try {
-      const chartOptions: Widget = (await req.json()) as Widget;
+      const url = new URL(req.url);
+      const chartOptionsParam = url.searchParams.get("chartOptions");
+
+      if (!chartOptionsParam) {
+        return new Response(
+          JSON.stringify({ error: "Missing chartOptions query parameter." }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const chartOptions: Widget = JSON.parse(chartOptionsParam);
       const { from, to, headers, dataset, rows_per_min, stats } =
         chartOptions.chartData;
       const opt = chartOptions.echartOptions;
