@@ -7,10 +7,10 @@ const PORT = 3001;
 type WidgetDataset = any; // Replace with specific type
 
 interface Widget {
-  chartType: string;
-  echartOptions: any;
-  query: string;
-  pid: string;
+  t: string;
+  e: any;
+  q: string;
+  p: string;
 }
 
 type ChartData = {
@@ -41,8 +41,8 @@ serve({
       const chartOptions: Widget = JSON.parse(chartOptionsParam);
 
       const params = new URLSearchParams();
-      params.set("query", chartOptions.query);
-      params.set("pid", chartOptions.pid);
+      params.set("query", chartOptions.q);
+      params.set("pid", chartOptions.p);
       const aptUrl = `${
         process.env.APITOOLKIT_URL
       }/chart_data_shot?${params.toString()}`;
@@ -55,7 +55,7 @@ serve({
         return res.json();
       })) as ChartData;
 
-      const opt = chartOptions.echartOptions;
+      const opt = chartOptions.e;
 
       opt.backgroundColor = "#ffffff";
       opt.xAxis = opt.xAxis || {};
@@ -87,7 +87,7 @@ serve({
         ...dataset.map((row: any) => [row[0] * 1000, ...row.slice(1)]),
       ];
       opt.yAxis.max = stats.max;
-      opt.series = createSeriesConfig(chartOptions.chartType, "discord", 0);
+      opt.series = createSeriesConfig(chartOptions.t, "discord", 0);
 
       const base64 = renderChart(opt);
       return new Response(base64, {
