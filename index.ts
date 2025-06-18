@@ -43,7 +43,9 @@ serve({
       const params = new URLSearchParams();
       params.set("query", chartOptions.query);
       params.set("pid", chartOptions.pid);
-      const aptUrl = `http://localhost:8080/chart_data_shot?${params.toString()}`;
+      const aptUrl = `${
+        process.env.APITOOLKIT_URL
+      }/chart_data_shot?${params.toString()}`;
       const { from, to, headers, dataset, rows_per_min, stats } = (await fetch(
         aptUrl,
         {
