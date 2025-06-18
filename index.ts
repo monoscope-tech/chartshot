@@ -9,36 +9,50 @@ type WidgetDataset = any; // Replace with specific type
 interface Widget {
   chartType: string;
   echartOptions: any;
-  chartData: {
-    from: number;
-    to: number;
-    headers: string[];
-    dataset: WidgetDataset;
-    rows_per_min: number;
-    stats: any;
-  };
+  query: string;
+  pid: string;
 }
+
+type ChartData = {
+  from: number;
+  to: number;
+  headers: string[];
+  dataset: WidgetDataset;
+  rows_per_min: number;
+  stats: any;
+};
 
 serve({
   port: PORT,
   fetch: async (req: Request) => {
     try {
       const url = new URL(req.url);
-      const chartOptionsParam = url.searchParams.get("chartOptions");
+      const chartOptionsParam = url.searchParams.get("opts");
 
       if (!chartOptionsParam) {
         return new Response(
-          JSON.stringify({ error: "Missing chartOptions query parameter." }),
+          JSON.stringify({ error: "Missing required query parameter." }),
           {
             status: 400,
             headers: { "Content-Type": "application/json" },
           }
         );
       }
-
       const chartOptions: Widget = JSON.parse(chartOptionsParam);
-      const { from, to, headers, dataset, rows_per_min, stats } =
-        chartOptions.chartData;
+
+      const params = new URLSearchParams();
+      params.set("query", chartOptions.query);
+      params.set("pid", chartOptions.pid);
+      const aptUrl = `http://localhost:8080/chart_data_shot?${params.toString()}`;
+      const { from, to, headers, dataset, rows_per_min, stats } = (await fetch(
+        aptUrl,
+        {
+          headers: { "X-Server-Token": "86186133-814f-4443-9973-f737d03a3986" },
+        }
+      ).then((res) => {
+        return res.json();
+      })) as ChartData;
+
       const opt = chartOptions.echartOptions;
 
       opt.backgroundColor = "#ffffff";
