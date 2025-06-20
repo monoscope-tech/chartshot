@@ -26,12 +26,11 @@ serve({
   fetch: async (req: Request) => {
     try {
       const url = new URL(req.url);
-      const chartOptionsParam = url.searchParams.get("opts");
-      const query = url.searchParams.get("q") || "";
-      const pid = url.searchParams.get("p") || "";
+      const query = url.searchParams.get("q");
+      const pid = url.searchParams.get("p");
       const chartType = url.searchParams.get("t") || "bar";
 
-      if (!chartOptionsParam) {
+      if (!query || !pid) {
         return new Response(
           JSON.stringify({ error: "Missing required query parameter." }),
           {
