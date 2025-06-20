@@ -8,7 +8,6 @@ type WidgetDataset = any; // Replace with specific type
 
 interface Widget {
   t: string;
-  e: any;
   q: string;
   p: string;
 }
@@ -55,19 +54,17 @@ serve({
         return res.json();
       })) as ChartData;
 
-      const opt = chartOptions.e;
-
-      opt.backgroundColor = "#ffffff";
-      opt.xAxis = opt.xAxis || {};
-      opt.xAxis.min = from * 1000;
-      opt.xAxis.max = to * 1000;
-      opt.grid = {
-        ...opt.grid,
+      options.backgroundColor = "#ffffff";
+      options.xAxis = options.xAxis || {};
+      options.xAxis.min = from * 1000;
+      options.xAxis.max = to * 1000;
+      options.grid = {
+        ...options.grid,
         left: "5px",
         right: "5px",
         containLabel: true,
       };
-      opt.title = {
+      options.title = {
         text: "",
         left: "center",
         top: 10,
@@ -77,19 +74,19 @@ serve({
           color: "#333",
         },
       };
-      opt.yAxis.axisLabel = {
+      options.yAxis.axisLabel = {
         formatter: function (value: number, index: number) {
           return formatNumber(value);
         },
       };
-      opt.dataset.source = [
+      options.dataset.source = [
         headers,
         ...dataset.map((row: any) => [row[0] * 1000, ...row.slice(1)]),
       ];
-      opt.yAxis.max = stats.max;
-      opt.series = createSeriesConfig(chartOptions.t, "discord", 0);
+      options.yAxis.max = stats.max;
+      options.series = createSeriesConfig(chartOptions.t, "discord", 0);
 
-      const base64 = renderChart(opt);
+      const base64 = renderChart(options);
       return new Response(base64, {
         status: 200,
         headers: { "Content-Type": "image/png" },
@@ -168,4 +165,86 @@ const formatNumber = (n: number): string => {
   }
 
   return n.toString();
+};
+
+const options: any = {
+  tooltip: {
+    show: true,
+    trigger: "axis",
+    axisPointer: {
+      type: "shadow",
+    },
+  },
+  legend: {
+    show: true,
+    type: "scroll",
+    top: "bottom",
+    textStyle: {
+      fontSize: 12,
+    },
+    itemWidth: 14,
+    itemHeight: 12,
+    itemGap: 8,
+    padding: [2, 4, 2, 4],
+    data: [],
+  },
+  grid: {
+    width: "100%",
+    left: "0%",
+    top: "5%",
+    bottom: "18%",
+    containLabel: true,
+    show: false,
+  },
+  xAxis: {
+    type: "time",
+    scale: true,
+    min: null,
+    max: null,
+    boundaryGap: [0, 0.01],
+    splitLine: {
+      show: false,
+    },
+    axisLine: {
+      show: true,
+      lineStyle: {
+        color: "#000833A6",
+        type: "solid",
+        opacity: 0.1,
+      },
+    },
+    axisLabel: {
+      show: true,
+    },
+    show: true,
+  },
+  yAxis: {
+    type: "value",
+    min: 0,
+    max: null,
+    splitLine: {
+      show: true,
+      lineStyle: {
+        type: "dotted",
+        color: "#0011661A",
+      },
+      interval: null,
+    },
+    axisTick: {
+      show: false,
+    },
+    axisLine: {
+      show: false,
+    },
+    axisLabel: {
+      show: true,
+      inside: false,
+      formatter: "function(value, index) { return formatNumber(value); }",
+    },
+    show: true,
+  },
+  dataset: {
+    source: null,
+  },
+  series: [],
 };
