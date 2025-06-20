@@ -27,6 +27,9 @@ serve({
     try {
       const url = new URL(req.url);
       const chartOptionsParam = url.searchParams.get("opts");
+      const query = url.searchParams.get("q") || "";
+      const pid = url.searchParams.get("p") || "";
+      const chartType = url.searchParams.get("t") || "bar";
 
       if (!chartOptionsParam) {
         return new Response(
@@ -37,11 +40,9 @@ serve({
           }
         );
       }
-      const chartOptions: Widget = JSON.parse(chartOptionsParam);
-
       const params = new URLSearchParams();
-      params.set("query", chartOptions.q);
-      params.set("pid", chartOptions.p);
+      params.set("query", query);
+      params.set("pid", pid);
       const aptUrl = `${
         process.env.APITOOLKIT_URL
       }/chart_data_shot?${params.toString()}`;
@@ -84,7 +85,7 @@ serve({
         ...dataset.map((row: any) => [row[0] * 1000, ...row.slice(1)]),
       ];
       options.yAxis.max = stats.max;
-      options.series = createSeriesConfig(chartOptions.t, "discord", 0);
+      options.series = createSeriesConfig(chartType, "discord", 0);
 
       const base64 = renderChart(options);
       return new Response(base64, {
