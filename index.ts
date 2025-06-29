@@ -29,6 +29,8 @@ serve({
       const query = url.searchParams.get("q");
       const pid = url.searchParams.get("p");
       const chartType = url.searchParams.get("t") || "bar";
+      const fromQ = url.searchParams.get("from");
+      const toQ = url.searchParams.get("to");
 
       if (!query || !pid) {
         return new Response(
@@ -42,6 +44,8 @@ serve({
       const params = new URLSearchParams();
       params.set("query", query);
       params.set("pid", pid);
+      fromQ && params.set("from", fromQ);
+      toQ && params.set("to", toQ);
       const aptUrl = `${
         process.env.APITOOLKIT_URL
       }/chart_data_shot?${params.toString()}`;
@@ -51,6 +55,7 @@ serve({
           headers: { "X-Server-Token": "86186133-814f-4443-9973-f737d03a3986" },
         }
       ).then((res) => {
+        console.log(res);
         return res.json();
       })) as ChartData;
 
