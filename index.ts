@@ -6,12 +6,6 @@ const PORT = 3001;
 
 type WidgetDataset = any; // Replace with specific type
 
-interface Widget {
-  t: string;
-  q: string;
-  p: string;
-}
-
 type ChartData = {
   from: number;
   to: number;
@@ -20,6 +14,10 @@ type ChartData = {
   rows_per_min: number;
   stats: any;
 };
+
+const theme = (await fetch(
+  `${process.env.APITOOLKIT_URL}/public/assets/echart-theme.json`
+).then((res) => res.json())) as { roma: any; default: any };
 
 serve({
   port: PORT,
@@ -31,6 +29,7 @@ serve({
       const chartType = url.searchParams.get("t") || "bar";
       const fromQ = url.searchParams.get("from");
       const toQ = url.searchParams.get("to");
+      const theme = url.searchParams.get("theme") || "default";
 
       if (!query || !pid) {
         return new Response(
@@ -55,7 +54,6 @@ serve({
           headers: { "X-Server-Token": "86186133-814f-4443-9973-f737d03a3986" },
         }
       ).then((res) => {
-        console.log(res);
         return res.json();
       })) as ChartData;
 
@@ -65,8 +63,6 @@ serve({
       options.xAxis.max = to * 1000;
       options.grid = {
         ...options.grid,
-        left: "5px",
-        right: "5px",
         containLabel: true,
       };
       options.title = {
@@ -91,7 +87,7 @@ serve({
       options.yAxis.max = stats.max;
       options.series = createSeriesConfig(chartType, "discord", 0);
 
-      const base64 = renderChart(options);
+      const base64 = renderChart(options, theme);
       return new Response(base64, {
         status: 200,
         headers: { "Content-Type": "image/png" },
@@ -108,10 +104,13 @@ serve({
 
 console.log(`Server is running on http://localhost:${PORT}`);
 
-function renderChart(options: any) {
+function renderChart(options: any, thm: string = "default") {
   const canvas = createCanvas(600, 300);
-  const chart = echarts.init(canvas as any);
+  echarts.registerTheme("default", theme.default);
+  echarts.registerTheme("roma", theme.roma);
+  const chart = echarts.init(canvas as any, thm);
   options.animation = false;
+
   chart.setOption(options);
   const base64 = canvas.toBuffer("image/png");
   chart.dispose();
@@ -181,7 +180,7 @@ const options: any = {
     },
   },
   legend: {
-    show: true,
+    show: false,
     type: "scroll",
     top: "bottom",
     textStyle: {
@@ -194,10 +193,10 @@ const options: any = {
     data: [],
   },
   grid: {
-    width: "100%",
-    left: "0%",
-    top: "5%",
-    bottom: "18%",
+    left: "2%",
+    right: "2%",
+    top: "10%",
+    bottom: "15%",
     containLabel: true,
     show: false,
   },
