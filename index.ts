@@ -25,6 +25,7 @@ serve({
     try {
       const url = new URL(req.url);
       const query = url.searchParams.get("q");
+      const sql = url.searchParams.get("sql");
       const pid = url.searchParams.get("p");
       const chartType = url.searchParams.get("t") || "bar";
       const fromQ = url.searchParams.get("from");
@@ -45,6 +46,7 @@ serve({
       params.set("pid", pid);
       fromQ && params.set("from", fromQ);
       toQ && params.set("to", toQ);
+      sql && params.set("sql", sql);
       const aptUrl = `${
         process.env.APITOOLKIT_URL
       }/chart_data_shot?${params.toString()}`;
