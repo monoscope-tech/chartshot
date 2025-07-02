@@ -87,6 +87,9 @@ serve({
         ...dataset.map((row: any) => [row[0] * 1000, ...row.slice(1)]),
       ];
       options.yAxis.max = stats.max;
+      if (chartType != "line") {
+        options.yAxis.max = stats.max_group_sum;
+      }
       options.series = createSeriesConfig(chartType, "discord", 0);
 
       const base64 = renderChart(options, theme);
