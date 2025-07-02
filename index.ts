@@ -32,7 +32,7 @@ serve({
       const toQ = url.searchParams.get("to");
       const theme = url.searchParams.get("theme") || "default";
 
-      if (!query || !pid) {
+      if (!pid) {
         return new Response(
           JSON.stringify({ error: "Missing required query parameter." }),
           {
@@ -42,11 +42,11 @@ serve({
         );
       }
       const params = new URLSearchParams();
-      params.set("query", query);
+      params.set("query", query || "");
       params.set("pid", pid);
       fromQ && params.set("from", fromQ);
       toQ && params.set("to", toQ);
-      sql && params.set("sql", sql);
+      sql && params.set("query_sql", sql);
       const aptUrl = `${
         process.env.APITOOLKIT_URL
       }/chart_data_shot?${params.toString()}`;
