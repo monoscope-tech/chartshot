@@ -1,19 +1,9 @@
 import { serve } from "bun";
 import { createCanvas } from "canvas";
 import * as echarts from "echarts";
+import { WidgetType, type ChartData, type Query, type Widget } from "./types";
 
 const PORT = 3001;
-
-type WidgetDataset = any; // Replace with specific type
-
-type ChartData = {
-  from: number;
-  to: number;
-  headers: string[];
-  dataset: WidgetDataset;
-  rows_per_min: number;
-  stats: any;
-};
 
 const theme = (await fetch(
   `${process.env.APITOOLKIT_URL}/public/assets/echart-theme.json`
@@ -27,10 +17,15 @@ serve({
       const query = url.searchParams.get("q");
       const sql = url.searchParams.get("sql");
       const pid = url.searchParams.get("p");
-      const chartType = url.searchParams.get("t") || "bar";
       const fromQ = url.searchParams.get("from");
       const toQ = url.searchParams.get("to");
-      const theme = url.searchParams.get("theme") || "default";
+
+      // get widget data from query parameter
+      const widget = url.searchParams.get("widget");
+      const widgetData = parseWidgetJson(widget || "");
+
+      let theme = url.searchParams.get("theme") || "default";
+      let chartType: WidgetType = url.searchParams.get("t") ? url.searchParams.get("t") as WidgetType : WidgetType.Timeseries;
 
       if (!pid) {
         return new Response(
@@ -42,11 +37,20 @@ serve({
         );
       }
       const params = new URLSearchParams();
-      params.set("query", query || "");
       params.set("pid", pid);
       fromQ && params.set("from", fromQ);
       toQ && params.set("to", toQ);
-      sql && params.set("query_sql", sql);
+
+      if (widgetData) {
+        chartType = widgetData.type || chartType;
+        theme = widgetData.theme || theme;
+        widgetData.sql && params.set("query_sql", widgetData.sql);
+        widgetData.query && params.set("query", widgetData.query);
+      } else {
+        params.set("query", query || "");
+        sql && params.set("query_sql", sql);
+      }
+
       const aptUrl = `${
         process.env.APITOOLKIT_URL
       }/chart_data_shot?${params.toString()}`;
@@ -58,25 +62,13 @@ serve({
       ).then((res) => {
         return res.json();
       })) as ChartData;
-
+      const options = widgetToECharts(
+        widgetData || { type: WidgetType.Timeseries }
+      );
       options.backgroundColor = "#ffffff";
       options.xAxis = options.xAxis || {};
       options.xAxis.min = from * 1000;
       options.xAxis.max = to * 1000;
-      options.grid = {
-        ...options.grid,
-        containLabel: true,
-      };
-      options.title = {
-        text: "",
-        left: "center",
-        top: 10,
-        textStyle: {
-          fontSize: 16,
-          fontWeight: "bold",
-          color: "#333",
-        },
-      };
       options.yAxis.axisLabel = {
         formatter: function (value: number, index: number) {
           return formatNumber(value);
@@ -87,10 +79,15 @@ serve({
         ...dataset.map((row: any) => [row[0] * 1000, ...row.slice(1)]),
       ];
       options.yAxis.max = stats.max;
-      if (chartType != "line") {
+      if (chartType != WidgetType.TimeseriesLine) {
         options.yAxis.max = stats.max_group_sum;
       }
-      options.series = createSeriesConfig(chartType, "discord", 0);
+      options.series = createSeriesConfig(widgetData || {type:WidgetType.Timeseries}, 0, echarts);
+
+      // createSeries(
+      //   widgetData?.type || WidgetType.Timeseries,
+      //   widgetData || {}
+      // );
 
       const base64 = renderChart(options, theme);
       return new Response(base64, {
@@ -135,23 +132,13 @@ const DEFAULT_PALETTE = [
   "#ea7ccc",
 ];
 
-const createSeriesConfig = (chartType: string, name: string, i: number) => {
-  const palette = DEFAULT_PALETTE;
-  const paletteColor = palette[i % palette.length];
-
-  const seriesOpt: any = {
-    type: chartType,
-    name,
-    stack: chartType === "line" ? undefined : "units",
-    showSymbol: false,
-    showBackground: true,
-    backgroundStyle: DEFAULT_BACKGROUND_STYLE,
-    barMaxWidth: "10",
-    barMinHeight: "1",
-    encode: { x: 0, y: i + 1 },
-  };
-
-  return seriesOpt;
+const parseWidgetJson = (widgetJson: string) => {
+  try {
+    return JSON.parse(widgetJson) as Widget;
+  } catch (error) {
+    console.error("Error parsing widget JSON:", error);
+    return null;
+  }
 };
 
 const formatNumber = (n: number): string => {
@@ -176,84 +163,137 @@ const formatNumber = (n: number): string => {
   return n.toString();
 };
 
-const options: any = {
-  tooltip: {
-    show: true,
-    trigger: "axis",
-    axisPointer: {
-      type: "shadow",
-    },
-  },
-  legend: {
-    show: false,
-    type: "scroll",
-    top: "bottom",
-    textStyle: {
-      fontSize: 12,
-    },
-    itemWidth: 14,
-    itemHeight: 12,
-    itemGap: 8,
-    padding: [2, 4, 2, 4],
-    data: [],
-  },
-  grid: {
-    left: "2%",
-    right: "2%",
-    top: "10%",
-    bottom: "15%",
-    containLabel: true,
-    show: false,
-  },
-  xAxis: {
-    type: "time",
-    scale: true,
-    min: null,
-    max: null,
-    boundaryGap: [0, 0.01],
-    splitLine: {
-      show: false,
-    },
-    axisLine: {
-      show: true,
-      lineStyle: {
-        color: "#000833A6",
-        type: "solid",
-        opacity: 0.1,
+export function widgetToECharts(widget: Widget): Record<string, any> {
+  const isStat = widget.type === WidgetType.TimeseriesStat;
+  const axisVisibility = !isStat;
+  const gridLinesVisibility = !isStat;
+  const legendVisibility = !isStat && widget.hideLegend !== true;
+
+  return {
+    tooltip: {
+      show: widget.showTooltip ?? true,
+      trigger: "axis",
+      axisPointer: {
+        type: "shadow",
       },
     },
-    axisLabel: {
-      show: true,
+    legend: {
+      show: legendVisibility,
+      type: "scroll",
+      top: widget.legendPosition ?? "bottom",
+      textStyle: { fontSize: 12 },
+      itemWidth: 14,
+      itemHeight: 12,
+      itemGap: 8,
+      padding: [2, 4, 2, 4],
     },
-    show: true,
-  },
-  yAxis: {
-    type: "value",
-    min: 0,
-    max: null,
-    splitLine: {
-      show: true,
-      lineStyle: {
-        type: "dotted",
-        color: "#0011661A",
+    grid: {
+      width: "100%",
+      left: "0%",
+      top:
+        widget.legendPosition === "top" && legendVisibility
+          ? "18%"
+          : widget.naked === true
+          ? "10%"
+          : "5%",
+      bottom:
+        widget.legendPosition !== "top" && legendVisibility ? "18%" : "1.8%",
+      containLabel: true,
+      show: false,
+    },
+    xAxis: {
+      type: "time",
+      scale: true,
+      min: widget.dataset?.from ? widget.dataset.from * 1000 : null,
+      max: widget.dataset?.to ? widget.dataset.to * 1000 : null,
+      boundaryGap: [0, 0.01],
+      splitLine: { show: false },
+      axisLine: {
+        show: axisVisibility,
+        lineStyle: {
+          color: "#000833A6",
+          type: "solid",
+          opacity: 0.1,
+        },
       },
-      interval: null,
+      axisLabel: {
+        show: axisVisibility && (widget.xAxis?.showAxisLabel ?? true),
+      },
+      show: axisVisibility || (widget.xAxis?.showAxisLabel ?? false),
     },
-    axisTick: {
-      show: false,
+    yAxis: {
+      type: "value",
+      min: 0,
+      max: widget.dataset?.stats?.max_group_sum ?? null,
+      splitLine: {
+        show: gridLinesVisibility,
+        lineStyle: {
+          type: "dotted",
+          color: "#0011661A",
+        },
+        interval: widget.yAxis?.showOnlyMaxLabel
+          ? "function(index, value) { return value === this.yAxis.max }"
+          : null,
+      },
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: {
+        show: axisVisibility && (widget.yAxis?.showAxisLabel ?? true),
+        inside: false,
+        formatter: widget.yAxis?.showOnlyMaxLabel
+          ? `function(value, index) { return (value === this.yAxis.max || value == 0) ? formatNumber(value) : ''; }`
+          : "function(value, index) { return formatNumber(value); }",
+      },
+      show: axisVisibility,
     },
-    axisLine: {
-      show: false,
+    dataset: {
+      source: widget.dataset?.source ?? null,
     },
-    axisLabel: {
-      show: true,
-      inside: false,
-      formatter: "function(value, index) { return formatNumber(value); }",
-    },
-    show: true,
-  },
-  dataset: {
-    source: null,
-  },
-  series: [],
+    animation: false,
+  };
+}
+
+const createSeriesConfig = (widgetData: Widget, i: number, echarts: any) => {
+  const t = widgetData.theme === "roma" ? "roma" : "default";
+  const palette = theme[t].color || DEFAULT_PALETTE;
+  const paletteColor = palette[i % palette.length];
+
+  const gradientColor = echarts.graphic.LinearGradient(0, 0, 0, 1, [
+    { offset: 0, color: echarts.color.modifyAlpha(paletteColor, 1) },
+    { offset: 1, color: echarts.color.modifyAlpha(paletteColor, 0) },
+  ]);
+  const chartType = mapWidgetTypeToChartType(widgetData.type);
+  const seriesOpt: any = {
+    type: chartType,
+    name: widgetData.query || widgetData.sql || "Unnamed",
+    stack:
+      chartType === "line" ? undefined : widgetData.yAxis?.label || "units",
+    showSymbol: false,
+    showBackground: true,
+    backgroundStyle: DEFAULT_BACKGROUND_STYLE,
+    barMaxWidth: "10",
+    barMinHeight: "1",
+    encode: { x: 0, y: i + 1 },
+  };
+
+  if (widgetData.type == "timeseries_stat") {
+    seriesOpt.itemStyle = { color: gradientColor };
+    seriesOpt.areaStyle = { color: gradientColor };
+  }
+
+  return seriesOpt;
 };
+
+export function mapWidgetTypeToChartType(widgetType: WidgetType): string {
+  switch (widgetType) {
+    case WidgetType.Timeseries:
+      return "bar";
+    case WidgetType.TimeseriesLine:
+    case WidgetType.TimeseriesStat:
+      return "line";
+    case WidgetType.Distribution:
+      return "bar";
+    default:
+      return "bar";
+  }
+}
