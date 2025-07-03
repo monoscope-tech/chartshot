@@ -22,10 +22,7 @@ serve({
 
       // get widget data from query parameter
       const widget = url.searchParams.get("widget");
-      console.log(widget);
       const widgetData = parseWidgetJson(widget || "");
-
-      console.log(widgetData);
 
       let theme = url.searchParams.get("theme") || "default";
       let chartType: WidgetType = url.searchParams.get("t")
