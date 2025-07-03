@@ -90,12 +90,6 @@ serve({
         0,
         echarts
       );
-
-      // createSeries(
-      //   widgetData?.type || WidgetType.Timeseries,
-      //   widgetData || {}
-      // );
-
       const base64 = renderChart(options, theme);
       return new Response(base64, {
         status: 200,
@@ -195,8 +189,9 @@ export function widgetToECharts(widget: Widget): Record<string, any> {
       padding: [2, 4, 2, 4],
     },
     grid: {
-      width: "100%",
-      left: "0%",
+      width: "96%",
+      left: "2%",
+      right: "2%",
       top:
         widget.legendPosition === "top" && legendVisibility
           ? "18%"
@@ -204,7 +199,7 @@ export function widgetToECharts(widget: Widget): Record<string, any> {
           ? "10%"
           : "5%",
       bottom:
-        widget.legendPosition !== "top" && legendVisibility ? "18%" : "1.8%",
+        widget.legendPosition !== "top" && legendVisibility ? "10%" : "5%",
       containLabel: true,
       show: false,
     },
@@ -272,7 +267,7 @@ const createSeriesConfig = (widgetData: Widget, i: number, echarts: any) => {
   const chartType = mapWidgetTypeToChartType(widgetData.type);
   const seriesOpt: any = {
     type: chartType,
-    name: widgetData.query || widgetData.sql || "Unnamed",
+    name: (widgetData.query || widgetData.sql || "Unnamed").substring(0,50),
     stack:
       chartType === "line" ? undefined : widgetData.yAxis?.label || "units",
     showSymbol: false,
