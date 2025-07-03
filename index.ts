@@ -22,10 +22,15 @@ serve({
 
       // get widget data from query parameter
       const widget = url.searchParams.get("widget");
+      console.log(widget);
       const widgetData = parseWidgetJson(widget || "");
 
+      console.log(widgetData);
+
       let theme = url.searchParams.get("theme") || "default";
-      let chartType: WidgetType = url.searchParams.get("t") ? url.searchParams.get("t") as WidgetType : WidgetType.Timeseries;
+      let chartType: WidgetType = url.searchParams.get("t")
+        ? (url.searchParams.get("t") as WidgetType)
+        : WidgetType.Timeseries;
 
       if (!pid) {
         return new Response(
@@ -60,6 +65,7 @@ serve({
           headers: { "X-Server-Token": "86186133-814f-4443-9973-f737d03a3986" },
         }
       ).then((res) => {
+        console.log(res);
         return res.json();
       })) as ChartData;
       const options = widgetToECharts(
@@ -82,7 +88,11 @@ serve({
       if (chartType != WidgetType.TimeseriesLine) {
         options.yAxis.max = stats.max_group_sum;
       }
-      options.series = createSeriesConfig(widgetData || {type:WidgetType.Timeseries}, 0, echarts);
+      options.series = createSeriesConfig(
+        widgetData || { type: WidgetType.Timeseries },
+        0,
+        echarts
+      );
 
       // createSeries(
       //   widgetData?.type || WidgetType.Timeseries,
@@ -132,14 +142,14 @@ const DEFAULT_PALETTE = [
   "#ea7ccc",
 ];
 
-const parseWidgetJson = (widgetJson: string) => {
+function parseWidgetJson(widgetJson: string) {
   try {
     return JSON.parse(widgetJson) as Widget;
   } catch (error) {
     console.error("Error parsing widget JSON:", error);
     return null;
   }
-};
+}
 
 const formatNumber = (n: number): string => {
   if (n >= 1_000_000_000)
@@ -256,12 +266,12 @@ export function widgetToECharts(widget: Widget): Record<string, any> {
 const createSeriesConfig = (widgetData: Widget, i: number, echarts: any) => {
   const t = widgetData.theme === "roma" ? "roma" : "default";
   const palette = theme[t].color || DEFAULT_PALETTE;
-  const paletteColor = palette[i % palette.length];
+  let paletteColor = palette[i % palette.length];
 
-  const gradientColor = echarts.graphic.LinearGradient(0, 0, 0, 1, [
-    { offset: 0, color: echarts.color.modifyAlpha(paletteColor, 1) },
-    { offset: 1, color: echarts.color.modifyAlpha(paletteColor, 0) },
-  ]);
+  // const gradientColor = echarts.graphic.LinearGradient(0, 0, 0, 1, [
+  //   { offset: 0, color: echarts.color.modifyAlpha(paletteColor, 1) },
+  //   { offset: 1, color: echarts.color.modifyAlpha(paletteColor, 0) },
+  // ]);
   const chartType = mapWidgetTypeToChartType(widgetData.type);
   const seriesOpt: any = {
     type: chartType,
@@ -277,8 +287,8 @@ const createSeriesConfig = (widgetData: Widget, i: number, echarts: any) => {
   };
 
   if (widgetData.type == "timeseries_stat") {
-    seriesOpt.itemStyle = { color: gradientColor };
-    seriesOpt.areaStyle = { color: gradientColor };
+    // seriesOpt.itemStyle = { color: gradientColor };
+    // seriesOpt.areaStyle = { color: gradientColor };
   }
 
   return seriesOpt;
