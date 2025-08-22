@@ -85,11 +85,16 @@ serve({
       if (chartType != WidgetType.TimeseriesLine) {
         options.yAxis.max = stats.max_group_sum;
       }
-      options.series = createSeriesConfig(
-        widgetData || { type: WidgetType.Timeseries },
-        0,
-        echarts
-      );
+      options.series = [];
+      for (let i = 0; i < headers.length - 1; i++) {
+        options.series.push(
+          createSeriesConfig(
+            widgetData || { type: WidgetType.Timeseries },
+            i,
+            echarts
+          )
+        );
+      }
       const base64 = renderChart(options, theme);
       return new Response(base64, {
         status: 200,
