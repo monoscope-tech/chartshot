@@ -62,7 +62,6 @@ serve({
           headers: { "X-Server-Token": "86186133-814f-4443-9973-f737d03a3986" },
         }
       ).then((res) => {
-        console.log(res);
         return res.json();
       })) as ChartData;
       const options = widgetToECharts(
@@ -272,7 +271,7 @@ const createSeriesConfig = (widgetData: Widget, i: number, echarts: any) => {
   const chartType = mapWidgetTypeToChartType(widgetData.type);
   const seriesOpt: any = {
     type: chartType,
-    name: (widgetData.query || widgetData.sql || "Unnamed").substring(0,50),
+    name: (widgetData.query || widgetData.sql || "Unnamed").substring(0, 50),
     stack:
       chartType === "line" ? undefined : widgetData.yAxis?.label || "units",
     showSymbol: false,
