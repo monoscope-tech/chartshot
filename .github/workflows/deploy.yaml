@@ -47,7 +47,7 @@ jobs:
           server: ${{ secrets.CAPTAINROVER_SERVER }}
           app: ${{ secrets.CAPTAINROVER_APP_NAME }}
           token: ${{ secrets.CAPTAINROVER_APP_TOKEN }}
-          image: "ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}"
+          image: ${{ env.IMAGE_URL }}
 
       - name: Show Deployment Output
         run: 'echo "Deployment URL: ${{ steps.deploy.outputs.url }}"'
