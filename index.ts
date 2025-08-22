@@ -281,6 +281,7 @@ const createSeriesConfig = (widgetData: Widget, i: number, echarts: any) => {
     barMaxWidth: "10",
     barMinHeight: "1",
     encode: { x: 0, y: i + 1 },
+    color: paletteColor,
   };
 
   if (widgetData.type == "timeseries_stat") {
