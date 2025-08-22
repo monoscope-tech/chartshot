@@ -24,12 +24,6 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GH_TOKEN }}
 
-      - name: Preset Image Name
-        run: |
-          IMAGE_URL="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${GITHUB_SHA::7}"
-          IMAGE_URL=$(echo $IMAGE_URL | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE_URL=$IMAGE_URL" >> $GITHUB_ENV
-
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v4
         with:
