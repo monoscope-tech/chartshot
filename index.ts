@@ -1,9 +1,24 @@
 import { serve } from "bun";
 import { createCanvas } from "canvas";
 import * as echarts from "echarts";
-import { WidgetType, type ChartData, type Query, type Widget } from "./types";
+import { randomUUID } from "crypto";
 
 const PORT = 3001;
+const BASE_URL = process.env.CHARTSHOT_URL || `http://localhost:${PORT}`;
+
+// Image cache with TTL (1 hour)
+const imageCache = new Map<string, { buffer: Buffer; createdAt: number }>();
+const IMAGE_TTL_MS = 3600000; // 1 hour
+
+// Cleanup expired images every minute
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, img] of imageCache) {
+    if (now - img.createdAt > IMAGE_TTL_MS) {
+      imageCache.delete(id);
+    }
+  }
+}, 60000);
 
 const theme = (await fetch(
   `${process.env.APITOOLKIT_URL}/public/assets/echart-theme.json`
@@ -14,93 +29,24 @@ serve({
   fetch: async (req: Request) => {
     try {
       const url = new URL(req.url);
-      const query = url.searchParams.get("q");
-      const sql = url.searchParams.get("sql");
-      const pid = url.searchParams.get("p");
-      const fromQ = url.searchParams.get("from");
-      const toQ = url.searchParams.get("to");
 
-      // get widget data from query parameter
-      const widget = url.searchParams.get("widget");
-      const widgetData = parseWidgetJson(widget || "");
-
-      let theme = url.searchParams.get("theme") || "default";
-      let chartType: WidgetType = url.searchParams.get("t")
-        ? (url.searchParams.get("t") as WidgetType)
-        : WidgetType.Timeseries;
-
-      if (!pid) {
-        return new Response(
-          JSON.stringify({ error: "Missing required query parameter." }),
-          {
-            status: 400,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-      const params = new URLSearchParams();
-      params.set("pid", pid);
-      fromQ && params.set("from", fromQ);
-      toQ && params.set("to", toQ);
-
-      if (widgetData) {
-        chartType = widgetData.type || chartType;
-        theme = widgetData.theme || theme;
-        widgetData.sql && params.set("query_sql", widgetData.sql);
-        widgetData.query && params.set("query", widgetData.query);
-      } else {
-        params.set("query", query || "");
-        sql && params.set("query_sql", sql);
+      // POST /render - accepts pre-built ECharts options from monoscope
+      if (req.method === "POST" && url.pathname === "/render") {
+        return handleRenderPost(req);
       }
 
-      const aptUrl = `${
-        process.env.APITOOLKIT_URL
-      }/chart_data_shot?${params.toString()}`;
-      const { from, to, headers, dataset, rows_per_min, stats } = (await fetch(
-        aptUrl,
-        {
-          headers: { "X-Server-Token": "86186133-814f-4443-9973-f737d03a3986" },
-        }
-      ).then((res) => {
-        return res.json();
-      })) as ChartData;
-      const options = widgetToECharts(
-        widgetData || { type: WidgetType.Timeseries }
-      );
-      options.backgroundColor = "#ffffff";
-      options.xAxis = options.xAxis || {};
-      options.xAxis.min = from * 1000;
-      options.xAxis.max = to * 1000;
-      options.yAxis.axisLabel = {
-        formatter: function (value: number, index: number) {
-          return formatNumber(value);
-        },
-      };
-      options.dataset.source = [
-        headers,
-        ...dataset.map((row: any) => [row[0] * 1000, ...row.slice(1)]),
-      ];
-      options.yAxis.max = stats.max;
-      if (chartType != WidgetType.TimeseriesLine) {
-        options.yAxis.max = stats.max_group_sum;
+      // GET /images/:id.png - serve cached images
+      const imageMatch = url.pathname.match(/^\/images\/([a-f0-9-]+)\.png$/);
+      if (req.method === "GET" && imageMatch) {
+        return handleImageGet(imageMatch[1]);
       }
-      options.series = [];
-      for (let i = 0; i < headers.length - 1; i++) {
-        options.series.push(
-          createSeriesConfig(
-            widgetData || { type: WidgetType.Timeseries },
-            i,
-            echarts
-          )
-        );
-      }
-      const base64 = renderChart(options, theme);
-      return new Response(base64, {
-        status: 200,
-        headers: { "Content-Type": "image/png" },
+
+      return new Response(JSON.stringify({ error: "Not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
       });
     } catch (error) {
-      console.error("Error generating chart:", error);
+      console.error("Error:", error);
       return new Response(JSON.stringify({ error: "Internal server error." }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
@@ -111,196 +57,63 @@ serve({
 
 console.log(`Server is running on http://localhost:${PORT}`);
 
-function renderChart(options: any, thm: string = "default") {
-  const canvas = createCanvas(600, 300);
+async function handleRenderPost(req: Request): Promise<Response> {
+  try {
+    const body = await req.json();
+    const { echarts: echartsOptions, width = 600, height = 300, theme: thm = "default" } = body;
+
+    if (!echartsOptions) {
+      return new Response(JSON.stringify({ error: "Missing echarts options" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Render chart to PNG
+    const buffer = renderChartFromOptions(echartsOptions, width, height, thm);
+
+    // Store in cache with UUID
+    const id = randomUUID();
+    imageCache.set(id, { buffer, createdAt: Date.now() });
+
+    // Return URL to the cached image
+    const imageUrl = `${BASE_URL}/images/${id}.png`;
+    return Response.json({ url: imageUrl });
+  } catch (error) {
+    console.error("Error in /render:", error);
+    return new Response(JSON.stringify({ error: "Failed to render chart" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+function handleImageGet(id: string): Response {
+  const img = imageCache.get(id);
+  if (!img) {
+    return new Response("Image not found", { status: 404 });
+  }
+  return new Response(img.buffer, {
+    status: 200,
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
+
+function renderChartFromOptions(options: any, width: number, height: number, thm: string): Buffer {
+  const canvas = createCanvas(width, height);
   echarts.registerTheme("default", theme.default);
   echarts.registerTheme("roma", theme.roma);
   const chart = echarts.init(canvas as any, thm);
+
+  // Ensure animation is disabled for server-side rendering
   options.animation = false;
+  options.backgroundColor = options.backgroundColor || "#ffffff";
 
   chart.setOption(options);
-  const base64 = canvas.toBuffer("image/png");
+  const buffer = canvas.toBuffer("image/png");
   chart.dispose();
-  return base64;
-}
-
-const DEFAULT_BACKGROUND_STYLE = { color: "rgba(240,248,255, 0.4)" };
-const DEFAULT_PALETTE = [
-  "#1A74A8",
-  "#067A57CC",
-  "#EE6666",
-  "#FAC858",
-  "#73C0DE",
-  "#3BA272",
-  "#FC8452",
-  "#9A60B4",
-  "#ea7ccc",
-];
-
-function parseWidgetJson(widgetJson: string) {
-  try {
-    return JSON.parse(widgetJson) as Widget;
-  } catch (error) {
-    console.error("Error parsing widget JSON:", error);
-    return null;
-  }
-}
-
-const formatNumber = (n: number): string => {
-  if (n >= 1_000_000_000)
-    return `${Math.floor(n / 1_000_000_000)}.${Math.floor(
-      (n % 1_000_000_000) / 100_000_000
-    )}B`;
-  if (n >= 1_000_000)
-    return `${Math.floor(n / 1_000_000)}.${Math.floor(
-      (n % 1_000_000) / 100_000
-    )}M`;
-  if (n >= 1_000)
-    return `${Math.floor(n / 1_000)}.${Math.floor((n % 1_000) / 100)}K`;
-
-  // Format decimals appropriately based on magnitude
-  if (!Number.isInteger(n)) {
-    if (n >= 100) return Math.round(n).toString();
-    if (n >= 10) return parseFloat(n.toFixed(1)).toString();
-    return parseFloat(n.toFixed(2)).toString();
-  }
-
-  return n.toString();
-};
-
-export function widgetToECharts(widget: Widget): Record<string, any> {
-  const isStat = widget.type === WidgetType.TimeseriesStat;
-  const axisVisibility = !isStat;
-  const gridLinesVisibility = !isStat;
-  const legendVisibility = !isStat && widget.hideLegend !== true;
-
-  return {
-    tooltip: {
-      show: widget.showTooltip ?? true,
-      trigger: "axis",
-      axisPointer: {
-        type: "shadow",
-      },
-    },
-    legend: {
-      show: legendVisibility,
-      type: "scroll",
-      top: widget.legendPosition ?? "bottom",
-      textStyle: { fontSize: 12 },
-      itemWidth: 14,
-      itemHeight: 12,
-      itemGap: 8,
-      padding: [2, 4, 2, 4],
-    },
-    grid: {
-      width: "96%",
-      left: "2%",
-      right: "2%",
-      top:
-        widget.legendPosition === "top" && legendVisibility
-          ? "18%"
-          : widget.naked === true
-          ? "10%"
-          : "5%",
-      bottom:
-        widget.legendPosition !== "top" && legendVisibility ? "10%" : "5%",
-      containLabel: true,
-      show: false,
-    },
-    xAxis: {
-      type: "time",
-      scale: true,
-      min: widget.dataset?.from ? widget.dataset.from * 1000 : null,
-      max: widget.dataset?.to ? widget.dataset.to * 1000 : null,
-      boundaryGap: [0, 0.01],
-      splitLine: { show: false },
-      axisLine: {
-        show: axisVisibility,
-        lineStyle: {
-          color: "#000833A6",
-          type: "solid",
-          opacity: 0.1,
-        },
-      },
-      axisLabel: {
-        show: axisVisibility && (widget.xAxis?.showAxisLabel ?? true),
-      },
-      show: axisVisibility || (widget.xAxis?.showAxisLabel ?? false),
-    },
-    yAxis: {
-      type: "value",
-      min: 0,
-      max: widget.dataset?.stats?.max_group_sum ?? null,
-      splitLine: {
-        show: gridLinesVisibility,
-        lineStyle: {
-          type: "dotted",
-          color: "#0011661A",
-        },
-        interval: widget.yAxis?.showOnlyMaxLabel
-          ? "function(index, value) { return value === this.yAxis.max }"
-          : null,
-      },
-      axisTick: { show: false },
-      axisLine: { show: false },
-      axisLabel: {
-        show: axisVisibility && (widget.yAxis?.showAxisLabel ?? true),
-        inside: false,
-        formatter: widget.yAxis?.showOnlyMaxLabel
-          ? `function(value, index) { return (value === this.yAxis.max || value == 0) ? formatNumber(value) : ''; }`
-          : "function(value, index) { return formatNumber(value); }",
-      },
-      show: axisVisibility,
-    },
-    dataset: {
-      source: widget.dataset?.source ?? null,
-    },
-    animation: false,
-  };
-}
-
-const createSeriesConfig = (widgetData: Widget, i: number, echarts: any) => {
-  const t = widgetData.theme === "roma" ? "roma" : "default";
-  const palette = theme[t].color || DEFAULT_PALETTE;
-  let paletteColor = palette[i % palette.length];
-
-  // const gradientColor = echarts.graphic.LinearGradient(0, 0, 0, 1, [
-  //   { offset: 0, color: echarts.color.modifyAlpha(paletteColor, 1) },
-  //   { offset: 1, color: echarts.color.modifyAlpha(paletteColor, 0) },
-  // ]);
-  const chartType = mapWidgetTypeToChartType(widgetData.type);
-  const seriesOpt: any = {
-    type: chartType,
-    name: (widgetData.query || widgetData.sql || "Unnamed").substring(0, 50),
-    stack:
-      chartType === "line" ? undefined : widgetData.yAxis?.label || "units",
-    showSymbol: false,
-    showBackground: true,
-    backgroundStyle: DEFAULT_BACKGROUND_STYLE,
-    barMaxWidth: "10",
-    barMinHeight: "1",
-    encode: { x: 0, y: i + 1 },
-    color: paletteColor,
-  };
-
-  if (widgetData.type == "timeseries_stat") {
-    // seriesOpt.itemStyle = { color: gradientColor };
-    // seriesOpt.areaStyle = { color: gradientColor };
-  }
-
-  return seriesOpt;
-};
-
-export function mapWidgetTypeToChartType(widgetType: WidgetType): string {
-  switch (widgetType) {
-    case WidgetType.Timeseries:
-      return "bar";
-    case WidgetType.TimeseriesLine:
-    case WidgetType.TimeseriesStat:
-      return "line";
-    case WidgetType.Distribution:
-      return "bar";
-    default:
-      return "bar";
-  }
+  return buffer;
 }
