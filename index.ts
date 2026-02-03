@@ -25,7 +25,7 @@ setInterval(() => {
 // Load theme with fallback
 const defaultTheme = { roma: {}, default: {} };
 const theme = (await fetch(
-  `${process.env.APITOOLKIT_URL}/public/assets/echart-theme.json`,
+  `${process.env.MONOSCOPE_URL}/public/assets/echart-theme.json`,
 )
   .then((res) => res.json())
   .catch((err) => {
