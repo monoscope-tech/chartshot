@@ -57,7 +57,7 @@ serve({
 
       // GET /images/:id.png - serve cached images
       const imageMatch = url.pathname.match(/^\/images\/([a-f0-9-]+)\.png$/);
-      if (req.method === "GET" && imageMatch) {
+      if (req.method === "GET" && imageMatch?.[1]) {
         return handleImageGet(imageMatch[1]);
       }
 
