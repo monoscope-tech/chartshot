@@ -2,6 +2,7 @@ import { serve } from "bun";
 import { createCanvas } from "canvas";
 import * as echarts from "echarts";
 import { randomUUID } from "crypto";
+import { applySeriesColors } from "./colorMapping";
 
 const PORT = 3001;
 const BASE_URL = process.env.CHARTSHOT_URL || `http://localhost:${PORT}`;
@@ -23,7 +24,7 @@ setInterval(() => {
 }, 60000);
 
 // Load theme with fallback
-const defaultTheme = { roma: {}, default: {} };
+const defaultTheme = { roma: {}, default: {}, dark: {} };
 const theme = (await fetch(
   `${process.env.MONOSCOPE_URL}/public/assets/echart-theme.json`,
 )
@@ -31,7 +32,7 @@ const theme = (await fetch(
   .catch((err) => {
     console.error("Failed to load theme, using defaults:", err);
     return defaultTheme;
-  })) as { roma: any; default: any };
+  })) as { roma: any; default: any; dark: any };
 
 serve({
   port: PORT,
@@ -176,7 +177,11 @@ function renderChartFromOptions(
   const canvas = createCanvas(width, height);
   echarts.registerTheme("default", theme.default);
   echarts.registerTheme("roma", theme.roma);
+  echarts.registerTheme("dark", theme.dark);
   const chart = echarts.init(canvas as any, thm);
+
+  // Apply deterministic series colors based on series names
+  options = applySeriesColors(options);
 
   // Ensure animation is disabled for server-side rendering
   options.animation = false;
