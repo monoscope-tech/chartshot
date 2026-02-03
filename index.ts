@@ -8,7 +8,7 @@ const BASE_URL = process.env.CHARTSHOT_URL || `http://localhost:${PORT}`;
 
 // Cache configuration
 const imageCache = new Map<string, { buffer: Buffer; createdAt: number }>();
-const IMAGE_TTL_MS = 3600000; // 1 hour
+const IMAGE_TTL_MS = 36000000; // 10 hours
 const MAX_CACHE_ENTRIES = 10000;
 const MAX_REQUEST_SIZE = 1_000_000; // 1MB
 
@@ -24,12 +24,14 @@ setInterval(() => {
 
 // Load theme with fallback
 const defaultTheme = { roma: {}, default: {} };
-const theme = await fetch(`${process.env.APITOOLKIT_URL}/public/assets/echart-theme.json`)
+const theme = (await fetch(
+  `${process.env.APITOOLKIT_URL}/public/assets/echart-theme.json`,
+)
   .then((res) => res.json())
   .catch((err) => {
     console.error("Failed to load theme, using defaults:", err);
     return defaultTheme;
-  }) as { roma: any; default: any };
+  })) as { roma: any; default: any };
 
 serve({
   port: PORT,
@@ -39,10 +41,13 @@ serve({
 
       // Health check endpoint
       if (req.method === "GET" && url.pathname === "/health") {
-        return new Response(JSON.stringify({ status: "ok", cacheSize: imageCache.size }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ status: "ok", cacheSize: imageCache.size }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       }
 
       // POST /render - accepts pre-built ECharts options from monoscope
@@ -92,13 +97,21 @@ async function handleRenderPost(req: Request): Promise<Response> {
     }
 
     const body = JSON.parse(bodyText);
-    const { echarts: echartsOptions, width = 600, height = 300, theme: thm = "default" } = body;
+    const {
+      echarts: echartsOptions,
+      width = 600,
+      height = 300,
+      theme: thm = "default",
+    } = body;
 
     if (!echartsOptions) {
-      return new Response(JSON.stringify({ error: "Missing echarts options" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Missing echarts options" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Validate dimensions
@@ -106,7 +119,12 @@ async function handleRenderPost(req: Request): Promise<Response> {
     const safeHeight = Math.min(Math.max(height, 100), 2000);
 
     // Render chart to PNG
-    const buffer = renderChartFromOptions(echartsOptions, safeWidth, safeHeight, thm);
+    const buffer = renderChartFromOptions(
+      echartsOptions,
+      safeWidth,
+      safeHeight,
+      thm,
+    );
 
     // Evict oldest entry if cache is full
     if (imageCache.size >= MAX_CACHE_ENTRIES) {
@@ -149,7 +167,12 @@ function handleImageGet(id: string): Response {
   });
 }
 
-function renderChartFromOptions(options: any, width: number, height: number, thm: string): Buffer {
+function renderChartFromOptions(
+  options: any,
+  width: number,
+  height: number,
+  thm: string,
+): Buffer {
   const canvas = createCanvas(width, height);
   echarts.registerTheme("default", theme.default);
   echarts.registerTheme("roma", theme.roma);
