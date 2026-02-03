@@ -6,9 +6,11 @@ import { randomUUID } from "crypto";
 const PORT = 3001;
 const BASE_URL = process.env.CHARTSHOT_URL || `http://localhost:${PORT}`;
 
-// Image cache with TTL (1 hour)
+// Cache configuration
 const imageCache = new Map<string, { buffer: Buffer; createdAt: number }>();
 const IMAGE_TTL_MS = 3600000; // 1 hour
+const MAX_CACHE_ENTRIES = 10000;
+const MAX_REQUEST_SIZE = 1_000_000; // 1MB
 
 // Cleanup expired images every minute
 setInterval(() => {
@@ -20,15 +22,28 @@ setInterval(() => {
   }
 }, 60000);
 
-const theme = (await fetch(
-  `${process.env.APITOOLKIT_URL}/public/assets/echart-theme.json`
-).then((res) => res.json())) as { roma: any; default: any };
+// Load theme with fallback
+const defaultTheme = { roma: {}, default: {} };
+const theme = await fetch(`${process.env.APITOOLKIT_URL}/public/assets/echart-theme.json`)
+  .then((res) => res.json())
+  .catch((err) => {
+    console.error("Failed to load theme, using defaults:", err);
+    return defaultTheme;
+  }) as { roma: any; default: any };
 
 serve({
   port: PORT,
   fetch: async (req: Request) => {
     try {
       const url = new URL(req.url);
+
+      // Health check endpoint
+      if (req.method === "GET" && url.pathname === "/health") {
+        return new Response(JSON.stringify({ status: "ok", cacheSize: imageCache.size }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
 
       // POST /render - accepts pre-built ECharts options from monoscope
       if (req.method === "POST" && url.pathname === "/render") {
@@ -59,7 +74,24 @@ console.log(`Server is running on http://localhost:${PORT}`);
 
 async function handleRenderPost(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    // Check content length before parsing
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength) > MAX_REQUEST_SIZE) {
+      return new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const bodyText = await req.text();
+    if (bodyText.length > MAX_REQUEST_SIZE) {
+      return new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const body = JSON.parse(bodyText);
     const { echarts: echartsOptions, width = 600, height = 300, theme: thm = "default" } = body;
 
     if (!echartsOptions) {
@@ -69,8 +101,23 @@ async function handleRenderPost(req: Request): Promise<Response> {
       });
     }
 
+    // Validate dimensions
+    const safeWidth = Math.min(Math.max(width, 100), 2000);
+    const safeHeight = Math.min(Math.max(height, 100), 2000);
+
     // Render chart to PNG
-    const buffer = renderChartFromOptions(echartsOptions, width, height, thm);
+    const buffer = renderChartFromOptions(echartsOptions, safeWidth, safeHeight, thm);
+
+    // Evict oldest entry if cache is full
+    if (imageCache.size >= MAX_CACHE_ENTRIES) {
+      let oldest: [string, { createdAt: number }] | null = null;
+      for (const entry of imageCache.entries()) {
+        if (!oldest || entry[1].createdAt < oldest[1].createdAt) {
+          oldest = entry as [string, { createdAt: number }];
+        }
+      }
+      if (oldest) imageCache.delete(oldest[0]);
+    }
 
     // Store in cache with UUID
     const id = randomUUID();
