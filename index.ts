@@ -180,8 +180,8 @@ function renderChartFromOptions(
   echarts.registerTheme("dark", theme.dark);
   const chart = echarts.init(canvas as any, thm);
 
-  // Apply deterministic series colors based on series names
-  options = applySeriesColors(options);
+  // Apply deterministic series colors against the selected render surface.
+  options = applySeriesColors(options, thm === "dark" ? "dark" : "light");
 
   // Ensure animation is disabled for server-side rendering
   options.animation = false;
